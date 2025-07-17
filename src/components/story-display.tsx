@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Heart, Download, Volume2 } from 'lucide-react';
+import { Heart, Download, Volume2, FileJson } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 type StoryDisplayProps = {
@@ -46,7 +46,7 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
     setIsFavorite(newIsFavorite);
   };
 
-  const handleExport = () => {
+  const handlePrint = () => {
     toast({
       title: "Printing Story",
       description: "Your story will be prepared for printing or saving as a PDF.",
@@ -54,6 +54,31 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
     // A simple way to allow saving as PDF
     window.print();
   };
+
+  const handleJsonExport = () => {
+    try {
+      const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+        JSON.stringify(story, null, 2)
+      )}`;
+      const link = document.createElement("a");
+      link.href = jsonString;
+      const safeTitle = story.story[0].sentence.substring(0, 20).replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      link.download = `fabula_${safeTitle}.json`;
+      link.click();
+      toast({
+        title: "JSON Export Successful",
+        description: "Your story has been downloaded.",
+      });
+    } catch (error) {
+      console.error("Failed to export JSON", error);
+      toast({
+        variant: "destructive",
+        title: "JSON Export Failed",
+        description: "There was an error exporting your story.",
+      });
+    }
+  };
+
 
   return (
     <div className="space-y-6">
@@ -81,7 +106,17 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={handleExport}>
+                  <Button variant="ghost" size="icon" onClick={handleJsonExport}>
+                    <FileJson />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Export as JSON</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" onClick={handlePrint}>
                     <Download />
                   </Button>
                 </TooltipTrigger>
