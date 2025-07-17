@@ -1,3 +1,4 @@
+
 // src/ai/flows/generate-latin-story.ts
 'use server';
 
@@ -21,6 +22,11 @@ const GenerateLatinStoryInputSchema = z.object({
 
 export type GenerateLatinStoryInput = z.infer<typeof GenerateLatinStoryInputSchema>;
 
+const StorySentenceSchema = z.object({
+  sentence: z.string().describe('A sentence from the story in Latin.'),
+  prompt: z.string().describe('A prompt for an image to illustrate the sentence. The image should be kid friendly and in a cartoon style.'),
+});
+
 const GenerateLatinStoryOutputSchema = z.object({
   story: z.array(z.object({
     sentence: z.string().describe('A sentence from the story in Latin.'),
@@ -37,36 +43,15 @@ export async function generateLatinStory(input: GenerateLatinStoryInput): Promis
 const generateLatinStoryPrompt = ai.definePrompt({
   name: 'generateLatinStoryPrompt',
   input: {schema: GenerateLatinStoryInputSchema},
-  output: {schema: GenerateLatinStoryOutputSchema},
+  output: {schema: z.object({story: z.array(StorySentenceSchema)})},
   prompt: `You are a Latin story writer for language learners.
 
   Create a short story of {{storyLength}} sentences in Latin for {{level}} learners about the topic of {{topic}}.
   The story should use high-frequency vocabulary and simple grammatical structures.
   The grammatical scope for the story is: {{grammarScope}}.
 
-  For each sentence in the story, also generate a prompt that can be used to generate an illustration for the sentence. Respond using JSON format.
-  
-  Output a JSON array where each item in the array has a sentence (latin sentence) and prompt (a prompt to generate an image from the sentence). Make the image suitable for kids.
-  
-  Example output:
-  [
-    {
-      "sentence": "Puella parva canem videt.",
-      "prompt": "A little girl sees a dog in a sunny park, comic style."
-    },
-    {
-      "sentence": "Canis ad puellam currit.",
-      "prompt": "The dog runs toward the girl, joyful and playful, cartoon style."
-    }
-  ]
+  For each sentence in the story, also generate a prompt that can be used to generate an illustration for the sentence. The image should be kid friendly and in a cartoon style.
   `,
-});
-
-const imageGenerationPrompt = ai.definePrompt({
-  name: 'imageGenerationPrompt',
-  input: {schema: z.object({imagePrompt: z.string()})},
-  output: {schema: z.object({imageUrl: z.string()})},
-  prompt: `Generate an image based on the following prompt: {{imagePrompt}}. Return the image as a data URI. The image should be kid friendly and in a cartoon style.`,
 });
 
 const generateLatinStoryFlow = ai.defineFlow(
@@ -76,11 +61,12 @@ const generateLatinStoryFlow = ai.defineFlow(
     outputSchema: GenerateLatinStoryOutputSchema,
   },
   async input => {
-    const {output: storyWithPrompts} = await generateLatinStoryPrompt(input);
-
-    if (!storyWithPrompts || !Array.isArray(storyWithPrompts)) {
-      throw new Error('Failed to generate the Latin story or invalid format received.');
+    const {output} = await generateLatinStoryPrompt(input);
+    
+    if (!output?.story) {
+        throw new Error('Failed to generate story. The output was empty.');
     }
+    const storyWithPrompts = output.story;
 
     const storyWithImageUrls = await Promise.all(
       storyWithPrompts.map(async (item: any) => {
