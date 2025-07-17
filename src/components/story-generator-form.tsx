@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles, Upload } from 'lucide-react';
 
 const formSchema = z.object({
   level: z.enum(['Beginner', 'Intermediate', 'Advanced']),
@@ -37,10 +37,11 @@ const formSchema = z.object({
 
 type StoryGeneratorFormProps = {
   onSubmit: (data: GenerateLatinStoryInput) => void;
+  onImportClick: () => void;
   isGenerating: boolean;
 };
 
-export function StoryGeneratorForm({ onSubmit, isGenerating }: StoryGeneratorFormProps) {
+export function StoryGeneratorForm({ onSubmit, isGenerating, onImportClick }: StoryGeneratorFormProps) {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -134,16 +135,22 @@ export function StoryGeneratorForm({ onSubmit, isGenerating }: StoryGeneratorFor
                 </FormItem>
               )}
             />
-            <Button type="submit" disabled={isGenerating} className="w-full">
-              {isGenerating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                'Generate Story'
-              )}
-            </Button>
+            <div className="flex flex-col gap-2">
+                <Button type="submit" disabled={isGenerating} className="w-full">
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    'Generate Story'
+                  )}
+                </Button>
+                <Button type="button" variant="outline" onClick={onImportClick} disabled={isGenerating}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Import Story
+                </Button>
+            </div>
           </form>
         </Form>
       </CardContent>

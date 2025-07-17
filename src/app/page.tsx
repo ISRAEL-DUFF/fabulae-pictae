@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useRef } from 'react';
 import { generateLatinStory, type GenerateLatinStoryInput, type GenerateLatinStoryOutput } from '@/ai/flows/generate-latin-story';
 import { AppHeader } from '@/components/header';
 import { StoryGeneratorForm } from '@/components/story-generator-form';
@@ -15,6 +15,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, startTransition] = useTransition();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleGenerateStory = async (data: GenerateLatinStoryInput) => {
     setError(null);
@@ -40,13 +41,79 @@ export default function Home() {
     });
   };
 
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result;
+        if (typeof content !== 'string') {
+          throw new Error('File content is not readable.');
+        }
+        const parsedStory = JSON.parse(content);
+        
+        // Basic validation
+        if (parsedStory && Array.isArray(parsedStory.story) && parsedStory.story.length > 0) {
+          setStory(parsedStory);
+          setError(null);
+          toast({
+            title: "Story Imported",
+            description: "Your story has been successfully loaded.",
+          });
+        } else {
+          throw new Error('Invalid story file format.');
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        setError(errorMessage);
+        toast({
+          variant: 'destructive',
+          title: 'Import Failed',
+          description: `Could not import story. ${errorMessage}`,
+        });
+      } finally {
+        // Reset file input so user can select the same file again
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+    reader.onerror = () => {
+      setError('Failed to read the file.');
+      toast({
+        variant: 'destructive',
+        title: 'Import Failed',
+        description: 'There was an error reading the selected file.',
+      });
+    };
+    reader.readAsText(file);
+  };
+
+
   return (
     <div className="flex flex-col min-h-screen">
       <AppHeader />
       <main className="flex-grow container mx-auto p-4 md:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 lg:gap-8">
           <div className="lg:col-span-1 mb-8 lg:mb-0">
-            <StoryGeneratorForm onSubmit={handleGenerateStory} isGenerating={isGenerating} />
+            <StoryGeneratorForm 
+              onSubmit={handleGenerateStory} 
+              isGenerating={isGenerating} 
+              onImportClick={handleImportClick} 
+            />
+             <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              className="hidden"
+              accept="application/json"
+            />
           </div>
           <div className="lg:col-span-2">
             <div className="h-full">
@@ -61,7 +128,7 @@ export default function Home() {
                   </CardHeader>
                   <CardContent>
                     <p className="text-muted-foreground">
-                      Fill out the form to your left to generate a new illustrated Latin story.
+                      Fill out the form to your left to generate a new illustrated Latin story, or import one from a file.
                     </p>
                   </CardContent>
                 </Card>
