@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import type { GenerateLatinStoryOutput } from '@/ai/flows/generate-latin-story';
 import { getWordGloss, type GetWordGlossOutput } from '@/ai/flows/get-word-gloss';
@@ -24,12 +24,54 @@ type GlossCache = {
 export function StoryDisplay({ story }: StoryDisplayProps) {
   const [showGlosses, setShowGlosses] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
-  const [activeGloss, setActiveGloss] = useState<{ word: string; data: GetWordGlossOutput | null; loading: boolean }>({ word: '', data: null, loading: false });
+  const [activeWord, setActiveWord] = useState<string | null>(null);
   const [glossCache, setGlossCache] = useState<GlossCache>({});
+  const [loadingGlosses, setLoadingGlosses] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   const storyId = story.story[0].sentence;
 
+  const uniqueWords = useMemo(() => {
+    const words = new Set<string>();
+    story.story.forEach(item => {
+      item.sentence.split(/(\s+|[.,;!?])/).filter(Boolean).forEach(word => {
+        if (word.match(/[a-zA-Z]/)) {
+          words.add(word.replace(/[.,;!?]/g, ''));
+        }
+      });
+    });
+    return Array.from(words);
+  }, [story]);
+
+  const prefetchGlosses = useCallback(async () => {
+    const sentenceContextMap: { [word: string]: string } = {};
+    story.story.forEach(item => {
+      item.sentence.split(/(\s+|[.,;!?])/).filter(Boolean).forEach(word => {
+        const cleanedWord = word.replace(/[.,;!?]/g, '');
+        if (word.match(/[a-zA-Z]/) && !sentenceContextMap[cleanedWord]) {
+          sentenceContextMap[cleanedWord] = item.sentence;
+        }
+      });
+    });
+
+    const wordsToFetch = uniqueWords.filter(word => !glossCache[word]);
+
+    await Promise.allSettled(
+      wordsToFetch.map(async (word) => {
+        try {
+          const glossData = await getWordGloss({ word, sentence: sentenceContextMap[word] });
+          setGlossCache(prev => ({ ...prev, [word]: glossData }));
+        } catch (error) {
+          console.warn(`Failed to prefetch gloss for: ${word}`, error);
+        }
+      })
+    );
+  }, [story, uniqueWords, glossCache]);
+
+  useEffect(() => {
+    prefetchGlosses();
+  }, [prefetchGlosses]);
+  
   useEffect(() => {
     const favorites = JSON.parse(localStorage.getItem('favoriteStories') || '{}');
     if (favorites[storyId]) {
@@ -88,26 +130,54 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
 
   const handleWordClick = async (word: string, sentence: string) => {
     const cleanedWord = word.replace(/[.,;!?]/g, '');
+    setActiveWord(cleanedWord);
+
     if (glossCache[cleanedWord]) {
-      setActiveGloss({ word: cleanedWord, data: glossCache[cleanedWord], loading: false });
       return;
     }
 
-    setActiveGloss({ word: cleanedWord, data: null, loading: true });
+    setLoadingGlosses(prev => new Set(prev).add(cleanedWord));
     try {
       const glossData = await getWordGloss({ word: cleanedWord, sentence });
       setGlossCache(prev => ({ ...prev, [cleanedWord]: glossData }));
-      setActiveGloss({ word: cleanedWord, data: glossData, loading: false });
     } catch (error) {
       console.error('Failed to get gloss:', error);
-      setActiveGloss({ word: cleanedWord, data: null, loading: false });
       toast({
         variant: 'destructive',
         title: 'Gloss Error',
         description: 'Could not fetch the gloss for this word.',
       });
+    } finally {
+      setLoadingGlosses(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(cleanedWord);
+        return newSet;
+      });
     }
   };
+  
+  const getGlossContent = (word: string) => {
+    const cleanedWord = word.replace(/[.,;!?]/g, '');
+    if (loadingGlosses.has(cleanedWord)) {
+      return (
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Fetching gloss...</span>
+        </div>
+      );
+    }
+    const data = glossCache[cleanedWord];
+    if (data) {
+       return (
+         <div className="space-y-2">
+           <p><strong className="font-semibold">Gloss:</strong> {data.gloss}</p>
+           <p><strong className="font-semibold">Morphology:</strong> {data.morphology}</p>
+           <p><strong className="font-semibold">Syntax:</strong> {data.syntax}</p>
+         </div>
+       );
+    }
+    return <span>Click to see gloss.</span>;
+  }
 
   return (
     <div className="space-y-6">
@@ -178,7 +248,7 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
                 <p className="text-lg md:text-xl leading-loose font-body">
                   {item.sentence.split(/(\s+|[.,;!?])/).filter(Boolean).map((word, i) =>
                     word.match(/[a-zA-Z]/) ? (
-                      <Popover key={i}>
+                      <Popover key={i} onOpenChange={(open) => !open && setActiveWord(null)}>
                         <PopoverTrigger asChild>
                           <span 
                             className={showGlosses ? 'cursor-pointer hover:bg-accent rounded-md px-1' : ''}
@@ -187,22 +257,9 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
                             {word}
                           </span>
                         </PopoverTrigger>
-                        {showGlosses && (
+                        {showGlosses && activeWord === word.replace(/[.,;!?]/g, '') && (
                            <PopoverContent className="w-auto max-w-sm text-sm" side="top">
-                             {activeGloss.loading && activeGloss.word === word.replace(/[.,;!?]/g, '') ? (
-                               <div className="flex items-center gap-2">
-                                 <Loader2 className="h-4 w-4 animate-spin" />
-                                 <span>Fetching gloss...</span>
-                               </div>
-                             ) : activeGloss.data && activeGloss.word === word.replace(/[.,;!?]/g, '') ? (
-                               <div className="space-y-2">
-                                 <p><strong className="font-semibold">Gloss:</strong> {activeGloss.data.gloss}</p>
-                                 <p><strong className="font-semibold">Morphology:</strong> {activeGloss.data.morphology}</p>
-                                 <p><strong className="font-semibold">Syntax:</strong> {activeGloss.data.syntax}</p>
-                               </div>
-                             ) : (
-                              <span>Click to see gloss.</span>
-                             )}
+                              {getGlossContent(word)}
                            </PopoverContent>
                         )}
                       </Popover>
