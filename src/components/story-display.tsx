@@ -3,22 +3,29 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import type { GenerateLatinStoryOutput } from '@/ai/flows/generate-latin-story';
-import { Card, CardContent } from '@/components/ui/card';
+import { getWordGloss, type GetWordGlossOutput } from '@/ai/flows/get-word-gloss';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Heart, Download, Volume2, FileJson } from 'lucide-react';
+import { Heart, Download, Volume2, FileJson, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 type StoryDisplayProps = {
   story: GenerateLatinStoryOutput;
 };
 
+type GlossCache = {
+  [word: string]: GetWordGlossOutput;
+};
+
 export function StoryDisplay({ story }: StoryDisplayProps) {
   const [showGlosses, setShowGlosses] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [activeGloss, setActiveGloss] = useState<{ word: string; data: GetWordGlossOutput | null; loading: boolean }>({ word: '', data: null, loading: false });
+  const [glossCache, setGlossCache] = useState<GlossCache>({});
   const { toast } = useToast();
 
   const storyId = story.story[0].sentence;
@@ -79,6 +86,28 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
     }
   };
 
+  const handleWordClick = async (word: string, sentence: string) => {
+    const cleanedWord = word.replace(/[.,;!?]/g, '');
+    if (glossCache[cleanedWord]) {
+      setActiveGloss({ word: cleanedWord, data: glossCache[cleanedWord], loading: false });
+      return;
+    }
+
+    setActiveGloss({ word: cleanedWord, data: null, loading: true });
+    try {
+      const glossData = await getWordGloss({ word: cleanedWord, sentence });
+      setGlossCache(prev => ({ ...prev, [cleanedWord]: glossData }));
+      setActiveGloss({ word: cleanedWord, data: glossData, loading: false });
+    } catch (error) {
+      console.error('Failed to get gloss:', error);
+      setActiveGloss({ word: cleanedWord, data: null, loading: false });
+      toast({
+        variant: 'destructive',
+        title: 'Gloss Error',
+        description: 'Could not fetch the gloss for this word.',
+      });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -151,13 +180,29 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
                     word.match(/[a-zA-Z]/) ? (
                       <Popover key={i}>
                         <PopoverTrigger asChild>
-                          <span className={showGlosses ? 'cursor-pointer hover:bg-accent rounded-md px-1' : ''}>
+                          <span 
+                            className={showGlosses ? 'cursor-pointer hover:bg-accent rounded-md px-1' : ''}
+                            onClick={() => showGlosses && handleWordClick(word, item.sentence)}
+                          >
                             {word}
                           </span>
                         </PopoverTrigger>
                         {showGlosses && (
-                           <PopoverContent className="w-auto text-sm">
-                             Gloss for &quot;{word.replace(/[.,;!?]/g, '')}&quot;
+                           <PopoverContent className="w-auto max-w-sm text-sm" side="top">
+                             {activeGloss.loading && activeGloss.word === word.replace(/[.,;!?]/g, '') ? (
+                               <div className="flex items-center gap-2">
+                                 <Loader2 className="h-4 w-4 animate-spin" />
+                                 <span>Fetching gloss...</span>
+                               </div>
+                             ) : activeGloss.data && activeGloss.word === word.replace(/[.,;!?]/g, '') ? (
+                               <div className="space-y-2">
+                                 <p><strong className="font-semibold">Gloss:</strong> {activeGloss.data.gloss}</p>
+                                 <p><strong className="font-semibold">Morphology:</strong> {activeGloss.data.morphology}</p>
+                                 <p><strong className="font-semibold">Syntax:</strong> {activeGloss.data.syntax}</p>
+                               </div>
+                             ) : (
+                              <span>Click to see gloss.</span>
+                             )}
                            </PopoverContent>
                         )}
                       </Popover>
