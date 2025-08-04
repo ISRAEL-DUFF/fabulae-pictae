@@ -30,6 +30,7 @@ export async function getSavedWordExpansions(): Promise<{
   const { data, error } = await supabase
     .from('expanded_words')
     .select('*')
+    .eq('language', 'latin')
     .order('created_at', { ascending: false });
 
   return { data, error };
