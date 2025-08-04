@@ -5,8 +5,7 @@ import { useState, useTransition, useEffect } from 'react';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import MDEditor from '@uiw/react-md-editor';
 
 import { expandWordDetails, type ExpandWordDetailsInput } from '@/ai/flows/expand-word-details';
 import { saveWordExpansion, getSavedWordExpansions, type SavedExpansion } from '@/services/wordService';
@@ -16,7 +15,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Wand2, FileText, History, Trash2 } from 'lucide-react';
+import { Loader2, Wand2, FileText, History } from 'lucide-react';
 
 const expansionFormSchema = z.object({
   word: z.string().min(1, { message: 'Please enter a word.' }),
@@ -56,7 +55,6 @@ export default function ExpansionPage() {
     setExpansion(null);
     startTransition(async () => {
       try {
-        // Check if word is already in history to avoid re-generating
         const existingExpansion = savedExpansions.find(e => e.word.toLowerCase() === data.word.toLowerCase());
         if (existingExpansion) {
             setExpansion(existingExpansion.expansion);
@@ -74,7 +72,7 @@ export default function ExpansionPage() {
           if (saveError) {
              throw new Error('The expansion could not be saved.');
           }
-          await fetchSavedExpansions(); // Refresh list
+          await fetchSavedExpansions();
         } else {
           throw new Error('The expansion result was empty.');
         }
@@ -195,14 +193,14 @@ export default function ExpansionPage() {
             )}
 
             {expansion && (
-              <ScrollArea className="h-[75vh] p-6">
-                <ReactMarkdown
-                  className="prose dark:prose-invert max-w-none"
-                  remarkPlugins={[remarkGfm]}
-                >
-                  {expansion}
-                </ReactMarkdown>
-              </ScrollArea>
+                <div data-color-mode="light">
+                    <MDEditor
+                        value={expansion}
+                        onChange={(value) => setExpansion(value || '')}
+                        preview="live"
+                        height="75vh"
+                    />
+                </div>
             )}
           </CardContent>
         </Card>
