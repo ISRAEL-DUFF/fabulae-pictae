@@ -11,13 +11,13 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-export const ExpandWordDetailsInputSchema = z.object({
+const ExpandWordDetailsInputSchema = z.object({
   word: z.string().describe('The Latin word to be expanded.'),
   sentence: z.string().describe('The full Latin sentence containing the word, for context.'),
 });
 export type ExpandWordDetailsInput = z.infer<typeof ExpandWordDetailsInputSchema>;
 
-export const ExpandWordDetailsOutputSchema = z.object({
+const ExpandWordDetailsOutputSchema = z.object({
   expansion: z.string().describe('A detailed breakdown of the word in Markdown format, including gloss, etymology, and grammatical paradigms.'),
 });
 export type ExpandWordDetailsOutput = z.infer<typeof ExpandWordDetailsOutputSchema>;
