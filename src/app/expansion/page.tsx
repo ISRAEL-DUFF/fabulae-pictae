@@ -6,9 +6,11 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
 
 import { expandWordDetails, type ExpandWordDetailsInput } from '@/ai/flows/expand-word-details';
-import type { ExpandWordDetailsOutput } from '@/ai/genkit-output';
+import type { ExpandWordDetailsOutput } from '@/ai/flows/expand-word-details';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -126,13 +128,8 @@ export default function ExpansionPage() {
             {expansion && (
               <ScrollArea className="h-[75vh] p-6">
                 <ReactMarkdown
-                  className="prose prose-sm dark:prose-invert max-w-none"
-                  components={{
-                    table: ({node, ...props}) => <table className="w-full text-left border-collapse" {...props} />,
-                    thead: ({node, ...props}) => <thead className="bg-muted" {...props} />,
-                    th: ({node, ...props}) => <th className="p-2 border" {...props} />,
-                    td: ({node, ...props}) => <td className="p-2 border" {...props} />,
-                  }}
+                  className="prose dark:prose-invert max-w-none"
+                  remarkPlugins={[remarkGfm]}
                 >
                   {expansion.expansion}
                 </ReactMarkdown>

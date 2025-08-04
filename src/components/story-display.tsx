@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Heart, Download, Volume2, FileJson, Loader2, BookOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 type StoryDisplayProps = {
@@ -211,13 +212,8 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
       return (
         <ScrollArea className="h-[70vh] p-6">
            <ReactMarkdown
-              className="prose prose-sm dark:prose-invert max-w-none"
-              components={{
-                table: ({node, ...props}) => <table className="w-full text-left border-collapse" {...props} />,
-                thead: ({node, ...props}) => <thead className="bg-muted" {...props} />,
-                th: ({node, ...props}) => <th className="p-2 border" {...props} />,
-                td: ({node, ...props}) => <td className="p-2 border" {...props} />,
-              }}
+              className="prose dark:prose-invert max-w-none"
+              remarkPlugins={[remarkGfm]}
            >
              {data.expansion}
            </ReactMarkdown>
