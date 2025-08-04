@@ -1,6 +1,7 @@
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
+import { AppHeader } from '@/components/header';
 
 export const metadata: Metadata = {
   title: 'Fabulae Pictae',
@@ -19,8 +20,11 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Literata:opsz@7..72&display=swap" rel="stylesheet" />
       </head>
-      <body className="font-body antialiased">
-        {children}
+      <body className="font-body antialiased flex flex-col min-h-screen">
+        <AppHeader />
+        <main className="flex-grow container mx-auto p-4 md:p-8">
+         {children}
+        </main>
         <Toaster />
       </body>
     </html>

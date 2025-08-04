@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useTransition, useRef } from 'react';
-import { generateLatinStory, type GenerateLatinStoryInput, type GenerateLatinStoryOutput } from '@/ai/flows/generate-latin-story';
-import { AppHeader } from '@/components/header';
+import { generateLatinStory, type GenerateLatinStoryInput } from '@/ai/flows/generate-latin-story';
+import type { GenerateLatinStoryOutput } from '@/ai/genkit-output';
 import { StoryGeneratorForm } from '@/components/story-generator-form';
 import { StoryDisplay } from '@/components/story-display';
 import { StorySkeleton } from '@/components/story-skeleton';
@@ -97,47 +97,42 @@ export default function Home() {
 
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <AppHeader />
-      <main className="flex-grow container mx-auto p-4 md:p-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 lg:gap-8">
-          <div className="lg:col-span-1 mb-8 lg:mb-0">
-            <StoryGeneratorForm 
-              onSubmit={handleGenerateStory} 
-              isGenerating={isGenerating} 
-              onImportClick={handleImportClick} 
-            />
-             <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              className="hidden"
-              accept="application/json"
-            />
-          </div>
-          <div className="lg:col-span-2">
-            <div className="h-full">
-              {isGenerating && <StorySkeleton />}
-              {!isGenerating && !story && !error && (
-                <Card className="h-full flex flex-col items-center justify-center text-center p-8 border-2 border-dashed">
-                  <CardHeader>
-                    <div className="mx-auto bg-secondary p-4 rounded-full mb-4">
-                      <BookOpenCheck className="w-12 h-12 text-primary" />
-                    </div>
-                    <CardTitle className="font-headline text-2xl">Welcome to Fabulae Pictae</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-muted-foreground">
-                      Fill out the form to your left to generate a new illustrated Latin story, or import one from a file.
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-              {story && <StoryDisplay story={story} key={story.story[0].sentence} />}
-            </div>
-          </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 lg:gap-8">
+      <div className="lg:col-span-1 mb-8 lg:mb-0">
+        <StoryGeneratorForm 
+          onSubmit={handleGenerateStory} 
+          isGenerating={isGenerating} 
+          onImportClick={handleImportClick} 
+        />
+          <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          className="hidden"
+          accept="application/json"
+        />
+      </div>
+      <div className="lg:col-span-2">
+        <div className="h-full">
+          {isGenerating && <StorySkeleton />}
+          {!isGenerating && !story && !error && (
+            <Card className="h-full flex flex-col items-center justify-center text-center p-8 border-2 border-dashed">
+              <CardHeader>
+                <div className="mx-auto bg-secondary p-4 rounded-full mb-4">
+                  <BookOpenCheck className="w-12 h-12 text-primary" />
+                </div>
+                <CardTitle className="font-headline text-2xl">Welcome to Fabulae Pictae</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Fill out the form to your left to generate a new illustrated Latin story, or import one from a file.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+          {story && <StoryDisplay story={story} key={story.story[0].sentence} />}
         </div>
-      </main>
+      </div>
     </div>
   );
 }
