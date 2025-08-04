@@ -13,7 +13,6 @@ import {z} from 'genkit';
 
 const ExpandWordDetailsInputSchema = z.object({
   word: z.string().describe('The Latin word to be expanded.'),
-  sentence: z.string().describe('The full Latin sentence containing the word, for context.'),
 });
 export type ExpandWordDetailsInput = z.infer<typeof ExpandWordDetailsInputSchema>;
 
@@ -30,7 +29,7 @@ const expandWordDetailsPrompt = ai.definePrompt({
   name: 'expandWordDetailsPrompt',
   input: {schema: ExpandWordDetailsInputSchema},
   output: {schema: ExpandWordDetailsOutputSchema},
-  prompt: `You are an expert Latin linguist and etymologist. Provide a detailed analysis for the word "{{word}}" in the context of the sentence "{{sentence}}".
+  prompt: `You are an expert Latin linguist and etymologist. Provide a detailed analysis for the word "{{word}}".
 
 The output must be in Markdown format.
 
@@ -47,7 +46,7 @@ If the word is a participle:
 2.  **Principal Parts**: Generate the verb's principal parts.
 3.  **Declension**: Generate the full declension paradigms for the participle in a Markdown table, including translations.
 4.  **Etymology**: Give a detailed etymology of the source verb.
-5.  **Usage**: Give a detailed description of the participle's usage in the sentence.
+5.  **Usage**: Give a detailed description of the participle's usage.
 
 If the word is a noun:
 1.  **Gloss**: Provide its English definition.
@@ -58,12 +57,12 @@ If the word is an adjective:
 1.  **Gloss**: Provide its English definition.
 2.  **Declension**: Generate its full declension paradigm in a Markdown table.
 3.  **Etymology**: Give a detailed etymology of the word, including its root/stem.
-4.  **Usage**: Give a detailed description of the adjective's usage in the sentence.
+4.  **Usage**: Give a detailed description of the adjective's usage.
 
 If the word is any other part of speech (pronoun, adverb, preposition, conjunction, etc.):
 1.  **Description**: Describe the word and its function.
 2.  **Etymology**: Give a detailed etymology of the word, including its root/stem.
-3.  **Usage**: Give a detailed description of the word's usage in the sentence.
+3.  **Usage**: Give a detailed description of the word's usage.
 
 Use Markdown tables for all paradigms (conjugations and declensions).
 `,

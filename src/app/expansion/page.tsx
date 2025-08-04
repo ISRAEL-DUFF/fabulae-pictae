@@ -13,14 +13,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Wand2, FileText } from 'lucide-react';
 
 const expansionFormSchema = z.object({
   word: z.string().min(1, { message: 'Please enter a word.' }),
-  sentence: z.string().min(3, { message: 'Please enter a context sentence.' }),
 });
 
 export default function ExpansionPage() {
@@ -32,7 +30,6 @@ export default function ExpansionPage() {
     resolver: zodResolver(expansionFormSchema),
     defaultValues: {
       word: '',
-      sentence: '',
     },
   });
 
@@ -67,7 +64,7 @@ export default function ExpansionPage() {
               Word Tools
             </CardTitle>
             <CardDescription>
-              Enter a Latin word and its sentence to get a detailed grammatical breakdown.
+              Enter a Latin word to get a detailed grammatical breakdown.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -81,19 +78,6 @@ export default function ExpansionPage() {
                       <FormLabel>Word</FormLabel>
                       <FormControl>
                         <Input placeholder="e.g., amicitia" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="sentence"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Context Sentence</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="e.g., Vera amicitia est rara." {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
