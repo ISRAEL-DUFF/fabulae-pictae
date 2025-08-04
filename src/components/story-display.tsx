@@ -4,14 +4,18 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import type { GenerateLatinStoryOutput } from '@/ai/flows/generate-latin-story';
 import { getWordGloss, type GetWordGlossOutput } from '@/ai/flows/get-word-gloss';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { expandWordDetails, type ExpandWordDetailsOutput, type ExpandWordDetailsInput } from '@/ai/flows/expand-word-details';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Heart, Download, Volume2, FileJson, Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Heart, Download, Volume2, FileJson, Loader2, BookOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import ReactMarkdown from 'react-markdown';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 type StoryDisplayProps = {
   story: GenerateLatinStoryOutput;
@@ -21,12 +25,20 @@ type GlossCache = {
   [word: string]: GetWordGlossOutput;
 };
 
+type ExpansionCache = {
+  [word: string]: ExpandWordDetailsOutput;
+}
+
 export function StoryDisplay({ story }: StoryDisplayProps) {
   const [showGlosses, setShowGlosses] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   const [activeWord, setActiveWord] = useState<string | null>(null);
   const [glossCache, setGlossCache] = useState<GlossCache>({});
+  const [expansionCache, setExpansionCache] = useState<ExpansionCache>({});
   const [loadingGlosses, setLoadingGlosses] = useState<Set<string>>(new Set());
+  const [loadingExpansions, setLoadingExpansions] = useState<Set<string>>(new Set());
+  const [expansionWord, setExpansionWord] = useState<ExpandWordDetailsInput | null>(null);
+
   const { toast } = useToast();
 
   const storyId = story.story[0].sentence;
@@ -34,7 +46,7 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
   const uniqueWords = useMemo(() => {
     const words = new Set<string>();
     story.story.forEach(item => {
-      item.sentence.split(/(\s+|[.,;!?])/).filter(Boolean).forEach(word => {
+      item.sentence.split(/(\\s+|[.,;!?])/).filter(Boolean).forEach(word => {
         if (word.match(/[a-zA-Z]/)) {
           words.add(word.replace(/[.,;!?]/g, ''));
         }
@@ -46,7 +58,7 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
   const prefetchGlosses = useCallback(async () => {
     const sentenceContextMap: { [word: string]: string } = {};
     story.story.forEach(item => {
-      item.sentence.split(/(\s+|[.,;!?])/).filter(Boolean).forEach(word => {
+      item.sentence.split(/(\\s+|[.,;!?])/).filter(Boolean).forEach(word => {
         const cleanedWord = word.replace(/[.,;!?]/g, '');
         if (word.match(/[a-zA-Z]/) && !sentenceContextMap[cleanedWord]) {
           sentenceContextMap[cleanedWord] = item.sentence;
@@ -100,7 +112,6 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
       title: "Printing Story",
       description: "Your story will be prepared for printing or saving as a PDF.",
     });
-    // A simple way to allow saving as PDF
     window.print();
   };
 
@@ -127,56 +138,103 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
       });
     }
   };
-
-  const handleWordClick = async (word: string, sentence: string) => {
+  
+  const handleWordClick = (word: string) => {
     const cleanedWord = word.replace(/[.,;!?]/g, '');
     setActiveWord(cleanedWord);
+  };
+  
+  const handleExpansionClick = async (word: string, sentence: string) => {
+    const cleanedWord = word.replace(/[.,;!?]/g, '');
+    setExpansionWord({ word: cleanedWord, sentence });
 
-    if (glossCache[cleanedWord]) {
+    if (expansionCache[cleanedWord]) {
       return;
     }
 
-    setLoadingGlosses(prev => new Set(prev).add(cleanedWord));
+    setLoadingExpansions(prev => new Set(prev).add(cleanedWord));
     try {
-      const glossData = await getWordGloss({ word: cleanedWord, sentence });
-      setGlossCache(prev => ({ ...prev, [cleanedWord]: glossData }));
+      const expansionData = await expandWordDetails({ word: cleanedWord, sentence });
+      setExpansionCache(prev => ({ ...prev, [cleanedWord]: expansionData }));
     } catch (error) {
-      console.error('Failed to get gloss:', error);
+      console.error('Failed to get expansion:', error);
       toast({
         variant: 'destructive',
-        title: 'Gloss Error',
-        description: 'Could not fetch the gloss for this word.',
+        title: 'Expansion Error',
+        description: 'Could not fetch the detailed expansion for this word.',
       });
+      setExpansionWord(null); // Close dialog on error
     } finally {
-      setLoadingGlosses(prev => {
+      setLoadingExpansions(prev => {
         const newSet = new Set(prev);
         newSet.delete(cleanedWord);
         return newSet;
       });
     }
   };
-  
-  const getGlossContent = (word: string) => {
+
+  const getGlossContent = (word: string, sentence: string) => {
     const cleanedWord = word.replace(/[.,;!?]/g, '');
-    if (loadingGlosses.has(cleanedWord)) {
+    const data = glossCache[cleanedWord];
+    
+    if (loadingGlosses.has(cleanedWord) || !data) {
       return (
-        <div className="flex items-center gap-2">
+        <div className="p-4 flex items-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span>Fetching gloss...</span>
         </div>
       );
     }
-    const data = glossCache[cleanedWord];
-    if (data) {
-       return (
-         <div className="space-y-2">
-           <p><strong className="font-semibold">Gloss:</strong> {data.gloss}</p>
-           <p><strong className="font-semibold">Morphology:</strong> {data.morphology}</p>
-           <p><strong className="font-semibold">Syntax:</strong> {data.syntax}</p>
-         </div>
-       );
+
+    return (
+      <div className="p-4 space-y-3">
+        <div>
+          <p><strong className="font-semibold">Gloss:</strong> {data.gloss}</p>
+          <p><strong className="font-semibold">Morphology:</strong> {data.morphology}</p>
+          <p><strong className="font-semibold">Syntax:</strong> {data.syntax}</p>
+        </div>
+        <Button size="sm" className="w-full" onClick={() => handleExpansionClick(word, sentence)}>
+          <BookOpen className="mr-2 h-4 w-4" />
+          Full Expansion
+        </Button>
+      </div>
+    );
+  }
+
+  const renderExpansionContent = () => {
+    if (!expansionWord) return null;
+    
+    const { word } = expansionWord;
+
+    if (loadingExpansions.has(word)) {
+      return (
+        <div className="flex items-center justify-center p-8 gap-2">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="text-lg">Generating detailed expansion...</span>
+        </div>
+      );
     }
-    return <span>Click to see gloss.</span>;
+
+    const data = expansionCache[word];
+    if (data) {
+      return (
+        <ScrollArea className="h-[70vh] p-6">
+           <ReactMarkdown
+              className="prose prose-sm dark:prose-invert max-w-none"
+              components={{
+                table: ({node, ...props}) => <table className="w-full text-left border-collapse" {...props} />,
+                thead: ({node, ...props}) => <thead className="bg-muted" {...props} />,
+                th: ({node, ...props}) => <th className="p-2 border" {...props} />,
+                td: ({node, ...props}) => <td className="p-2 border" {...props} />,
+              }}
+           >
+             {data.expansion}
+           </ReactMarkdown>
+        </ScrollArea>
+      );
+    }
+
+    return null;
   }
 
   return (
@@ -189,7 +247,7 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
               checked={showGlosses}
               onCheckedChange={setShowGlosses}
             />
-            <Label htmlFor="gloss-toggle">Show Glosses</Label>
+            <Label htmlFor="gloss-toggle">Show Pop-ups</Label>
           </div>
           <div className="flex items-center gap-2">
             <TooltipProvider>
@@ -246,20 +304,20 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
                    <span className="sr-only">Play audio</span>
                  </Button>
                 <p className="text-lg md:text-xl leading-loose font-body">
-                  {item.sentence.split(/(\s+|[.,;!?])/).filter(Boolean).map((word, i) =>
+                  {item.sentence.split(/(\\s+|[.,;!?])/).filter(Boolean).map((word, i) =>
                     word.match(/[a-zA-Z]/) ? (
                       <Popover key={i} onOpenChange={(open) => !open && setActiveWord(null)}>
                         <PopoverTrigger asChild>
                           <span 
                             className={showGlosses ? 'cursor-pointer hover:bg-accent rounded-md px-1' : ''}
-                            onClick={() => showGlosses && handleWordClick(word, item.sentence)}
+                            onClick={() => showGlosses && handleWordClick(word)}
                           >
                             {word}
                           </span>
                         </PopoverTrigger>
                         {showGlosses && activeWord === word.replace(/[.,;!?]/g, '') && (
-                           <PopoverContent className="w-auto max-w-sm text-sm" side="top">
-                              {getGlossContent(word)}
+                           <PopoverContent className="w-auto max-w-sm text-sm p-0" side="top">
+                              {getGlossContent(word, item.sentence)}
                            </PopoverContent>
                         )}
                       </Popover>
@@ -273,6 +331,18 @@ export function StoryDisplay({ story }: StoryDisplayProps) {
           </Card>
         ))}
       </div>
+
+       <Dialog open={!!expansionWord} onOpenChange={(open) => !open && setExpansionWord(null)}>
+         <DialogContent className="max-w-3xl">
+           <DialogHeader>
+             <DialogTitle className="font-headline text-2xl">Word Expansion: <span className="font-bold">{expansionWord?.word}</span></DialogTitle>
+             <DialogDescription>
+                In the context of: "{expansionWord?.sentence}"
+             </DialogDescription>
+           </DialogHeader>
+           {renderExpansionContent()}
+         </DialogContent>
+       </Dialog>
     </div>
   );
 }
