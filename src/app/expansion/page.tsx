@@ -1,31 +1,31 @@
 
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-
 import { expandWordDetails, type ExpandWordDetailsInput } from '@/ai/flows/expand-word-details';
-import type { ExpandWordDetailsOutput } from '@/ai/flows/expand-word-details';
+import { saveWordExpansion, getSavedWordExpansions, type SavedExpansion } from '@/services/wordService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Wand2, FileText } from 'lucide-react';
+import { Loader2, Wand2, FileText, History, Trash2 } from 'lucide-react';
 
 const expansionFormSchema = z.object({
   word: z.string().min(1, { message: 'Please enter a word.' }),
 });
 
 export default function ExpansionPage() {
-  const [expansion, setExpansion] = useState<ExpandWordDetailsOutput | null>(null);
+  const [expansion, setExpansion] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [savedExpansions, setSavedExpansions] = useState<SavedExpansion[]>([]);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof expansionFormSchema>>({
@@ -35,13 +35,46 @@ export default function ExpansionPage() {
     },
   });
 
+  const fetchSavedExpansions = async () => {
+    const { data, error } = await getSavedWordExpansions();
+    if (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Error Fetching History',
+        description: 'Could not load your previously saved word expansions.',
+      });
+    } else if (data) {
+      setSavedExpansions(data);
+    }
+  };
+
+  useEffect(() => {
+    fetchSavedExpansions();
+  }, []);
+
   const handleExpansion = async (data: ExpandWordDetailsInput) => {
     setExpansion(null);
     startTransition(async () => {
       try {
+        // Check if word is already in history to avoid re-generating
+        const existingExpansion = savedExpansions.find(e => e.word.toLowerCase() === data.word.toLowerCase());
+        if (existingExpansion) {
+            setExpansion(existingExpansion.expansion);
+            toast({
+                title: "Loaded from History",
+                description: `Displaying saved expansion for "${data.word}".`,
+            });
+            return;
+        }
+
         const result = await expandWordDetails(data);
         if (result?.expansion) {
-          setExpansion(result);
+          setExpansion(result.expansion);
+          const { error: saveError } = await saveWordExpansion(data.word, result.expansion);
+          if (saveError) {
+             throw new Error('The expansion could not be saved.');
+          }
+          await fetchSavedExpansions(); // Refresh list
         } else {
           throw new Error('The expansion result was empty.');
         }
@@ -55,10 +88,15 @@ export default function ExpansionPage() {
       }
     });
   };
+  
+  const handleHistoryClick = (savedExpansion: SavedExpansion) => {
+    form.setValue('word', savedExpansion.word);
+    setExpansion(savedExpansion.expansion);
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <div className="lg:col-span-1">
+      <div className="lg:col-span-1 space-y-8">
         <Card>
           <CardHeader>
             <CardTitle className="font-headline flex items-center gap-2">
@@ -99,12 +137,43 @@ export default function ExpansionPage() {
             </Form>
           </CardContent>
         </Card>
+        <Card>
+            <CardHeader>
+                <CardTitle className="font-headline flex items-center gap-2">
+                    <History className="w-6 h-6 text-accent" />
+                    History
+                </CardTitle>
+                <CardDescription>
+                    Previously analyzed words.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                {savedExpansions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No words analyzed yet.</p>
+                ) : (
+                    <ScrollArea className="h-60">
+                        <div className="space-y-2">
+                        {savedExpansions.map((item) => (
+                            <Button
+                            key={item.id}
+                            variant="ghost"
+                            className="w-full justify-start font-normal"
+                            onClick={() => handleHistoryClick(item)}
+                            >
+                            {item.word}
+                            </Button>
+                        ))}
+                        </div>
+                    </ScrollArea>
+                )}
+            </CardContent>
+        </Card>
       </div>
 
       <div className="lg:col-span-2">
         <Card className="h-full">
           <CardContent className="p-0 h-full">
-            {isPending && (
+            {(isPending) && (
               <div className="flex items-center justify-center h-full p-8">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -120,7 +189,7 @@ export default function ExpansionPage() {
                   </div>
                   <CardTitle className="font-headline text-2xl">Word Expansion</CardTitle>
                   <p className="text-muted-foreground mt-2">
-                    Your detailed word analysis will appear here.
+                    Your detailed word analysis will appear here. Select one from your history or analyze a new one.
                   </p>
                 </div>
             )}
@@ -131,7 +200,7 @@ export default function ExpansionPage() {
                   className="prose dark:prose-invert max-w-none"
                   remarkPlugins={[remarkGfm]}
                 >
-                  {expansion.expansion}
+                  {expansion}
                 </ReactMarkdown>
               </ScrollArea>
             )}
