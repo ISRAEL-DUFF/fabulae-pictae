@@ -2,7 +2,6 @@
 'use server';
 
 import { supabase } from '@/lib/supabaseClient';
-import type { ExpandWordDetailsOutput } from '@/ai/flows/expand-word-details';
 
 export type SavedExpansion = {
   id: number;
@@ -18,7 +17,8 @@ export async function saveWordExpansion(
   const { data, error } = await supabase
     .from('expanded_words')
     .insert([{ word, expansion, language: 'latin' }])
-    .select();
+    .select()
+    .returns<SavedExpansion[]>();
 
   return { data, error };
 }
@@ -33,4 +33,16 @@ export async function getSavedWordExpansions(): Promise<{
     .order('created_at', { ascending: false });
 
   return { data, error };
+}
+
+export async function updateWordExpansion(
+    id: number,
+    expansion: string
+): Promise<{ data: any; error: any }> {
+    const { data, error } = await supabase
+        .from('expanded_words')
+        .update({ expansion })
+        .eq('id', id);
+
+    return { data, error };
 }
