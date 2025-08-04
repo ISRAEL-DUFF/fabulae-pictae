@@ -38,12 +38,12 @@ First, determine the part of speech for "{{word}}".
 If the word is a verb:
 1.  **Gloss**: Provide its English definition.
 2.  **Principal Parts**: Generate its principal parts.
-3.  **Conjugation**: Generate its full conjugation paradigms in a Markdown table.
+3.  **Conjugation**: Generate its full conjugation paradigms in a Markdown table. This must include all tenses (Present, Imperfect, Future, Perfect, Pluperfect, Future Perfect), moods (Indicative, Subjunctive, Imperative), and voices (Active and Passive).
 4.  **Etymology**: Give a detailed etymology of the word.
 
 If the word is a participle:
 1.  **Verb Source**: Identify the verb it is derived from.
-2.  **Principal Parts**: Generate the verb's principal parts.
+2.  **Principal Parts**: Generate the source verb's principal parts.
 3.  **Declension**: Generate the full declension paradigms for the participle in a Markdown table, including translations.
 4.  **Etymology**: Give a detailed etymology of the source verb.
 5.  **Usage**: Give a detailed description of the participle's usage.
