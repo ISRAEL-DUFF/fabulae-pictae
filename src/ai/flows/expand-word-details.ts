@@ -12,12 +12,17 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const ExpandWordDetailsInputSchema = z.object({
-  word: z.string().describe('The Latin word to be expanded.'),
+  word: z.string().describe('The Latin word or comma-separated words to be expanded.'),
 });
 export type ExpandWordDetailsInput = z.infer<typeof ExpandWordDetailsInputSchema>;
 
-const ExpandWordDetailsOutputSchema = z.object({
+const SingleExpansionSchema = z.object({
+  word: z.string().describe('The original Latin word.'),
   expansion: z.string().describe('A detailed breakdown of the word in Markdown format, including gloss, etymology, and grammatical paradigms.'),
+});
+
+const ExpandWordDetailsOutputSchema = z.object({
+  expansions: z.array(SingleExpansionSchema),
 });
 export type ExpandWordDetailsOutput = z.infer<typeof ExpandWordDetailsOutputSchema>;
 
@@ -27,8 +32,8 @@ export async function expandWordDetails(input: ExpandWordDetailsInput): Promise<
 
 const expandWordDetailsPrompt = ai.definePrompt({
   name: 'expandWordDetailsPrompt',
-  input: {schema: ExpandWordDetailsInputSchema},
-  output: {schema: ExpandWordDetailsOutputSchema},
+  input: {schema: z.object({ word: z.string() })},
+  output: {schema: z.object({ expansion: z.string() })},
   prompt: `You are an expert Latin linguist and etymologist. Provide a detailed analysis for the word "{{word}}".
 
 The output must be in Markdown format.
@@ -75,10 +80,25 @@ const expandWordDetailsFlow = ai.defineFlow(
     outputSchema: ExpandWordDetailsOutputSchema,
   },
   async input => {
-    const {output} = await expandWordDetailsPrompt(input);
-    if (!output) {
-        throw new Error('Failed to get word expansion.');
+    const words = input.word.split(',').map(w => w.trim()).filter(Boolean);
+    
+    const expansionPromises = words.map(async (word) => {
+        const {output} = await expandWordDetailsPrompt({ word });
+        if (!output) {
+            throw new Error(`Failed to get expansion for word: ${word}`);
+        }
+        return {
+            word: word,
+            expansion: output.expansion,
+        };
+    });
+    
+    const expansions = await Promise.all(expansionPromises);
+
+    if (expansions.length === 0) {
+        throw new Error('No valid words were provided for expansion.');
     }
-    return output;
+
+    return { expansions };
   }
 );

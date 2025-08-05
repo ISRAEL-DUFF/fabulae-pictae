@@ -19,6 +19,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Wand2, FileText, History, Edit, Save, X, Search } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
 
 const expansionFormSchema = z.object({
   word: z.string().min(1, { message: 'Please enter a word.' }),
@@ -109,6 +110,8 @@ export default function ExpansionPage() {
   const [isUpdating, startUpdateTransition] = useTransition();
   const [savedExpansions, setSavedExpansions] = useState<SavedExpansion[]>([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [batchStatus, setBatchStatus] = useState('');
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof expansionFormSchema>>({
@@ -138,29 +141,52 @@ export default function ExpansionPage() {
   const handleExpansion = async (data: ExpandWordDetailsInput) => {
     setActiveExpansion(null);
     setIsEditing(false);
+    setProgress(0);
+    setBatchStatus('');
+
+    const words = data.word.split(',').map(w => w.trim()).filter(Boolean);
 
     startTransition(async () => {
       try {
-        const existingExpansion = savedExpansions.find(e => e.word.toLowerCase() === data.word.toLowerCase());
-        if (existingExpansion) {
-            setActiveExpansion(existingExpansion);
-            toast({
-                title: "Loaded from History",
-                description: `Displaying saved expansion for "${data.word}".`,
-            });
-            return;
+        if (words.length === 1) {
+            const word = words[0];
+            const existingExpansion = savedExpansions.find(e => e.word.toLowerCase() === word.toLowerCase());
+            if (existingExpansion) {
+                setActiveExpansion(existingExpansion);
+                toast({
+                    title: "Loaded from History",
+                    description: `Displaying saved expansion for "${word}".`,
+                });
+                return;
+            }
         }
 
         const result = await expandWordDetails(data);
-        if (result?.expansion) {
-          const { data: savedData, error: saveError } = await saveWordExpansion(data.word, result.expansion);
-          if (saveError || !savedData) {
-             throw new Error('The expansion could not be saved.');
-          }
-          setActiveExpansion(savedData[0]);
-          await fetchSavedExpansions();
+        if (result?.expansions?.length) {
+            const total = result.expansions.length;
+            let savedCount = 0;
+            const newExpansions: SavedExpansion[] = [];
+
+            for (const expansion of result.expansions) {
+                setBatchStatus(`Saving "${expansion.word}"...`);
+                const { data: savedData, error: saveError } = await saveWordExpansion(expansion.word, expansion.expansion);
+                if (saveError || !savedData) {
+                    throw new Error(`The expansion for "${expansion.word}" could not be saved.`);
+                }
+                newExpansions.push(savedData[0]);
+                savedCount++;
+                setProgress((savedCount / total) * 100);
+            }
+          
+            await fetchSavedExpansions();
+            setActiveExpansion(newExpansions[newExpansions.length - 1]); // Show the last one
+            toast({
+                title: 'Batch Expansion Complete',
+                description: `${savedCount} word(s) were successfully analyzed and saved.`,
+            });
+
         } else {
-          throw new Error('The expansion result was empty.');
+            throw new Error('The expansion result was empty.');
         }
       } catch (e) {
         const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
@@ -169,6 +195,9 @@ export default function ExpansionPage() {
           title: 'Error Generating Expansion',
           description: errorMessage,
         });
+      } finally {
+        setProgress(0);
+        setBatchStatus('');
       }
     });
   };
@@ -236,7 +265,7 @@ export default function ExpansionPage() {
               Word Tools
             </CardTitle>
             <CardDescription>
-              Enter a Latin word to get a detailed grammatical breakdown.
+              Enter a Latin word (or comma-separated words) for a detailed grammatical breakdown.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -247,9 +276,9 @@ export default function ExpansionPage() {
                   name="word"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Word</FormLabel>
+                      <FormLabel>Word(s)</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., amicitia" {...field} />
+                        <Input placeholder="e.g., amicitia, rex, currere" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -263,7 +292,7 @@ export default function ExpansionPage() {
                         Analyzing...
                         </>
                     ) : (
-                        'Analyze Word'
+                        'Analyze Word(s)'
                     )}
                     </Button>
                     <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
@@ -317,11 +346,17 @@ export default function ExpansionPage() {
         <Card className="h-full">
           <CardContent className="p-0 h-full">
             {isPending && (
-              <div className="flex items-center justify-center h-full p-8">
+              <div className="flex flex-col items-center justify-center h-full p-8 gap-4">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                   <span className="text-lg">Generating detailed expansion...</span>
                 </div>
+                {batchStatus && (
+                  <div className="w-full max-w-sm text-center">
+                    <Progress value={progress} className="mb-2" />
+                    <p className="text-sm text-muted-foreground">{batchStatus}</p>
+                  </div>
+                )}
               </div>
             )}
 
