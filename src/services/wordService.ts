@@ -27,14 +27,21 @@ export async function getHistoryIndex(): Promise<{
     data: { letter: string }[] | null;
     error: any;
   }> {
-    const { data, error } = await supabase.rpc('get_distinct_first_letters');
+    const { data, error } = await supabase
+        .from('expanded_words')
+        .select('word')
+        .eq('language', 'latin');
+
+    if (error) {
+        return { data: null, error };
+    }
     
-    // The RPC returns lowercase, so we ensure it's consistent
     if (data) {
-        return { data: data.map((d: { first_letter: string }) => ({ letter: d.first_letter.toUpperCase() })), error: null };
+        const letters = [...new Set(data.map(item => item.word.charAt(0).toUpperCase()))];
+        return { data: letters.map(letter => ({ letter })), error: null };
     }
 
-    return { data, error };
+    return { data: [], error: null };
 }
 
 export async function getWordsByLetter(letter: string): Promise<{
