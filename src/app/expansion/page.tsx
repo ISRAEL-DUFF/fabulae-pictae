@@ -10,15 +10,15 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { expandWordDetails, type ExpandWordDetailsInput } from '@/ai/flows/expand-word-details';
-import { saveWordExpansion, getSavedWordExpansions, updateWordExpansion, searchWordExpansions, type SavedExpansion } from '@/services/wordService';
+import { saveWordExpansion, getSavedWordExpansions, updateWordExpansion, searchWordExpansions, getSavedWordExpansionsCount, EXPANSIONS_PER_PAGE, type SavedExpansion } from '@/services/wordService';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Wand2, FileText, History, Edit, Save, X, Search } from 'lucide-react';
+import { Loader2, Wand2, FileText, History, Edit, Save, X, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 
 const expansionFormSchema = z.object({
@@ -113,6 +113,9 @@ export default function ExpansionPage() {
   const [progress, setProgress] = useState(0);
   const [batchStatus, setBatchStatus] = useState('');
   const { toast } = useToast();
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const form = useForm<z.infer<typeof expansionFormSchema>>({
     resolver: zodResolver(expansionFormSchema),
@@ -121,8 +124,8 @@ export default function ExpansionPage() {
     },
   });
 
-  const fetchSavedExpansions = async () => {
-    const { data, error } = await getSavedWordExpansions();
+  const fetchSavedExpansions = useCallback(async (page: number) => {
+    const { data, error } = await getSavedWordExpansions(page);
     if (error) {
       toast({
         variant: 'destructive',
@@ -131,12 +134,21 @@ export default function ExpansionPage() {
       });
     } else if (data) {
       setSavedExpansions(data);
+      setCurrentPage(page);
     }
-  };
+  }, [toast]);
+
+  const fetchTotalCount = useCallback(async () => {
+    const { count, error } = await getSavedWordExpansionsCount();
+    if (!error && count !== null) {
+      setTotalPages(Math.ceil(count / EXPANSIONS_PER_PAGE));
+    }
+  }, []);
 
   useEffect(() => {
-    fetchSavedExpansions();
-  }, []);
+    fetchSavedExpansions(1);
+    fetchTotalCount();
+  }, [fetchSavedExpansions, fetchTotalCount]);
 
   const handleExpansion = async (data: ExpandWordDetailsInput) => {
     setActiveExpansion(null);
@@ -178,7 +190,8 @@ export default function ExpansionPage() {
                 setProgress((savedCount / total) * 100);
             }
           
-            await fetchSavedExpansions();
+            await fetchSavedExpansions(1);
+            await fetchTotalCount();
             setActiveExpansion(newExpansions[newExpansions.length - 1]); // Show the last one
             toast({
                 title: 'Batch Expansion Complete',
@@ -253,6 +266,12 @@ export default function ExpansionPage() {
             });
           }
       });
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      fetchSavedExpansions(newPage);
+    }
   };
 
   return (
@@ -339,6 +358,31 @@ export default function ExpansionPage() {
                     </ScrollArea>
                 )}
             </CardContent>
+            {totalPages > 1 && (
+                <CardFooter className="flex justify-between items-center pt-4">
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage <= 1}
+                    >
+                        <ChevronLeft className="mr-2 h-4 w-4" />
+                        Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                        Page {currentPage} of {totalPages}
+                    </span>
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage >= totalPages}
+                    >
+                        Next
+                        <ChevronRight className="ml-2 h-4 w-4" />
+                    </Button>
+                </CardFooter>
+            )}
         </Card>
       </div>
 
