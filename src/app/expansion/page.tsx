@@ -10,7 +10,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { expandWordDetails, type ExpandWordDetailsInput } from '@/ai/flows/expand-word-details';
-import { saveWordExpansion, getSavedWordExpansions, updateWordExpansion, searchWordExpansions, getSavedWordExpansionsCount, EXPANSIONS_PER_PAGE, type SavedExpansion } from '@/services/wordService';
+import { saveWordExpansion, getSavedWordExpansions, updateWordExpansion, searchWordExpansions, getSavedWordExpansionsCount, type SavedExpansion } from '@/services/wordService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -24,6 +24,8 @@ import { Progress } from '@/components/ui/progress';
 const expansionFormSchema = z.object({
   word: z.string().min(1, { message: 'Please enter a word.' }),
 });
+
+const EXPANSIONS_PER_PAGE = 10;
 
 function SearchExpansionsModal({ onSelect }: { onSelect: (expansion: SavedExpansion) => void }) {
     const [searchTerm, setSearchTerm] = useState('');

@@ -10,7 +10,7 @@ export type SavedExpansion = {
   expansion: string;
 };
 
-export const EXPANSIONS_PER_PAGE = 10;
+const EXPANSIONS_PER_PAGE = 10;
 
 export async function saveWordExpansion(
   word: string,
