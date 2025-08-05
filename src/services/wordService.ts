@@ -10,8 +10,6 @@ export type SavedExpansion = {
   expansion: string;
 };
 
-const EXPANSIONS_PER_PAGE = 10;
-
 export async function saveWordExpansion(
   word: string,
   expansion: string
@@ -25,30 +23,34 @@ export async function saveWordExpansion(
   return { data, error };
 }
 
-export async function getSavedWordExpansions(page: number = 1): Promise<{
-  data: SavedExpansion[] | null;
-  error: any;
-}> {
-  const from = (page - 1) * EXPANSIONS_PER_PAGE;
-  const to = from + EXPANSIONS_PER_PAGE - 1;
+export async function getHistoryIndex(): Promise<{
+    data: { letter: string }[] | null;
+    error: any;
+  }> {
+    const { data, error } = await supabase.rpc('get_distinct_first_letters');
+    
+    // The RPC returns lowercase, so we ensure it's consistent
+    if (data) {
+        return { data: data.map((d: { first_letter: string }) => ({ letter: d.first_letter.toUpperCase() })), error: null };
+    }
 
-  const { data, error } = await supabase
-    .from('expanded_words')
-    .select('*')
-    .eq('language', 'latin')
-    .order('created_at', { ascending: false })
-    .range(from, to);
-
-  return { data, error };
+    return { data, error };
 }
 
-export async function getSavedWordExpansionsCount(): Promise<{ count: number | null; error: any }> {
-    const { count, error } = await supabase
-        .from('expanded_words')
-        .select('*', { count: 'exact', head: true })
-        .eq('language', 'latin');
-
-    return { count, error };
+export async function getWordsByLetter(letter: string): Promise<{
+    data: SavedExpansion[] | null;
+    error: any;
+  }> {
+    if (!letter) return { data: [], error: null };
+  
+    const { data, error } = await supabase
+      .from('expanded_words')
+      .select('*')
+      .eq('language', 'latin')
+      .ilike('word', `${letter}%`)
+      .order('word', { ascending: true });
+  
+    return { data, error };
 }
 
 

@@ -10,7 +10,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { expandWordDetails, type ExpandWordDetailsInput } from '@/ai/flows/expand-word-details';
-import { saveWordExpansion, getSavedWordExpansions, updateWordExpansion, searchWordExpansions, getSavedWordExpansionsCount, type SavedExpansion } from '@/services/wordService';
+import { saveWordExpansion, getHistoryIndex, getWordsByLetter, updateWordExpansion, searchWordExpansions, type SavedExpansion } from '@/services/wordService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -18,14 +18,13 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Wand2, FileText, History, Edit, Save, X, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, Wand2, FileText, History, Edit, Save, X, Search } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import { cn } from '@/lib/utils';
 
 const expansionFormSchema = z.object({
   word: z.string().min(1, { message: 'Please enter a word.' }),
 });
-
-const EXPANSIONS_PER_PAGE = 10;
 
 function SearchExpansionsModal({ onSelect }: { onSelect: (expansion: SavedExpansion) => void }) {
     const [searchTerm, setSearchTerm] = useState('');
@@ -110,14 +109,15 @@ export default function ExpansionPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isUpdating, startUpdateTransition] = useTransition();
-  const [savedExpansions, setSavedExpansions] = useState<SavedExpansion[]>([]);
+  const [historyWords, setHistoryWords] = useState<SavedExpansion[]>([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [progress, setProgress] = useState(0);
   const [batchStatus, setBatchStatus] = useState('');
   const { toast } = useToast();
   
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [activeIndex, setActiveIndex] = useState<string | null>(null);
+  const [availableIndexes, setAvailableIndexes] = useState<string[]>([]);
+  const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('');
 
   const form = useForm<z.infer<typeof expansionFormSchema>>({
     resolver: zodResolver(expansionFormSchema),
@@ -126,31 +126,51 @@ export default function ExpansionPage() {
     },
   });
 
-  const fetchSavedExpansions = useCallback(async (page: number) => {
-    const { data, error } = await getSavedWordExpansions(page);
+  const fetchIndexes = useCallback(async () => {
+    const { data, error } = await getHistoryIndex();
+    if (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Could not load history index.',
+      });
+    } else if (data) {
+      setAvailableIndexes(data.map(item => item.letter.toUpperCase()));
+      // If no index is selected, or the current index has no more words, select the first available one.
+      if (!activeIndex && data.length > 0) {
+        const firstIndex = data[0].letter;
+        setActiveIndex(firstIndex);
+        fetchWordsByIndex(firstIndex);
+      } else if (activeIndex) {
+        fetchWordsByIndex(activeIndex); // Refresh current index
+      }
+    }
+  }, [toast, activeIndex]);
+
+  const fetchWordsByIndex = useCallback(async (letter: string) => {
+    const { data, error } = await getWordsByLetter(letter);
     if (error) {
       toast({
         variant: 'destructive',
         title: 'Error Fetching History',
         description: 'Could not load your previously saved word expansions.',
       });
-    } else if (data) {
-      setSavedExpansions(data);
-      setCurrentPage(page);
+    } else {
+      setHistoryWords(data || []);
     }
   }, [toast]);
 
-  const fetchTotalCount = useCallback(async () => {
-    const { count, error } = await getSavedWordExpansionsCount();
-    if (!error && count !== null) {
-      setTotalPages(Math.ceil(count / EXPANSIONS_PER_PAGE));
-    }
-  }, []);
-
   useEffect(() => {
-    fetchSavedExpansions(1);
-    fetchTotalCount();
-  }, [fetchSavedExpansions, fetchTotalCount]);
+    fetchIndexes();
+  }, [fetchIndexes]);
+  
+  useEffect(() => {
+    if (activeIndex) {
+      fetchWordsByIndex(activeIndex);
+    } else {
+      setHistoryWords([]);
+    }
+  }, [activeIndex, fetchWordsByIndex]);
 
   const handleExpansion = async (data: ExpandWordDetailsInput) => {
     setActiveExpansion(null);
@@ -164,9 +184,9 @@ export default function ExpansionPage() {
       try {
         if (words.length === 1) {
             const word = words[0];
-            const existingExpansion = savedExpansions.find(e => e.word.toLowerCase() === word.toLowerCase());
-            if (existingExpansion) {
-                setActiveExpansion(existingExpansion);
+            const existingWords = historyWords.find(e => e.word.toLowerCase() === word.toLowerCase());
+            if (existingWords && activeIndex === word.charAt(0).toUpperCase()) {
+                setActiveExpansion(existingWords);
                 toast({
                     title: "Loaded from History",
                     description: `Displaying saved expansion for "${word}".`,
@@ -192,9 +212,12 @@ export default function ExpansionPage() {
                 setProgress((savedCount / total) * 100);
             }
           
-            await fetchSavedExpansions(1);
-            await fetchTotalCount();
-            setActiveExpansion(newExpansions[newExpansions.length - 1]); // Show the last one
+            await fetchIndexes();
+            // After saving, set the active index to the first letter of the last saved word
+            const lastWord = newExpansions[newExpansions.length - 1];
+            setActiveIndex(lastWord.word.charAt(0).toUpperCase());
+            setActiveExpansion(lastWord);
+
             toast({
                 title: 'Batch Expansion Complete',
                 description: `${savedCount} word(s) were successfully analyzed and saved.`,
@@ -225,6 +248,10 @@ export default function ExpansionPage() {
 
   const handleSearchSelect = (savedExpansion: SavedExpansion) => {
     handleHistoryClick(savedExpansion);
+    const letter = savedExpansion.word.charAt(0).toUpperCase();
+    if(activeIndex !== letter) {
+      setActiveIndex(letter);
+    }
     setIsSearchOpen(false);
   }
 
@@ -252,7 +279,7 @@ export default function ExpansionPage() {
             // Update the state locally and globally
             const updatedExpansion = { ...activeExpansion, expansion: editableContent };
             setActiveExpansion(updatedExpansion);
-            setSavedExpansions(prev => prev.map(e => e.id === activeExpansion.id ? updatedExpansion : e));
+            setHistoryWords(prev => prev.map(e => e.id === activeExpansion.id ? updatedExpansion : e));
 
             setIsEditing(false);
             toast({
@@ -269,12 +296,13 @@ export default function ExpansionPage() {
           }
       });
   };
-
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      fetchSavedExpansions(newPage);
+  
+  const handleIndexClick = (letter: string) => {
+    if (availableIndexes.includes(letter)) {
+      setActiveIndex(letter);
     }
   };
+
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -337,16 +365,32 @@ export default function ExpansionPage() {
                     History
                 </CardTitle>
                 <CardDescription>
-                    Previously analyzed words.
+                    Previously analyzed words, indexed alphabetically.
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                {savedExpansions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No words analyzed yet.</p>
+                <div className="flex flex-wrap gap-1 justify-center mb-4">
+                  {ALPHABET.map(letter => (
+                    <Button
+                      key={letter}
+                      size="icon"
+                      variant={activeIndex === letter ? "default" : "outline"}
+                      onClick={() => handleIndexClick(letter)}
+                      disabled={!availableIndexes.includes(letter)}
+                      className="h-8 w-8 text-xs"
+                    >
+                      {letter}
+                    </Button>
+                  ))}
+                </div>
+                {historyWords.length === 0 && activeIndex ? (
+                     <p className="text-sm text-center text-muted-foreground p-4">No saved words starting with "{activeIndex}".</p>
+                ) : historyWords.length === 0 && availableIndexes.length === 0 ? (
+                    <p className="text-sm text-muted-foreground p-4">No words analyzed yet.</p>
                 ) : (
                     <ScrollArea className="h-60">
                         <div className="space-y-2">
-                        {savedExpansions.map((item) => (
+                        {historyWords.map((item) => (
                             <Button
                             key={item.id}
                             variant="ghost"
@@ -360,31 +404,6 @@ export default function ExpansionPage() {
                     </ScrollArea>
                 )}
             </CardContent>
-            {totalPages > 1 && (
-                <CardFooter className="flex justify-between items-center pt-4">
-                    <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => handlePageChange(currentPage - 1)}
-                        disabled={currentPage <= 1}
-                    >
-                        <ChevronLeft className="mr-2 h-4 w-4" />
-                        Previous
-                    </Button>
-                    <span className="text-sm text-muted-foreground">
-                        Page {currentPage} of {totalPages}
-                    </span>
-                    <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage >= totalPages}
-                    >
-                        Next
-                        <ChevronRight className="ml-2 h-4 w-4" />
-                    </Button>
-                </CardFooter>
-            )}
         </Card>
       </div>
 
