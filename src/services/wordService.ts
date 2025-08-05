@@ -47,3 +47,21 @@ export async function updateWordExpansion(
 
     return { data, error };
 }
+
+export async function searchWordExpansions(searchTerm: string): Promise<{
+    data: SavedExpansion[] | null;
+    error: any;
+  }> {
+    if (!searchTerm) {
+        return { data: [], error: null };
+    }
+  
+    const { data, error } = await supabase
+      .from('expanded_words')
+      .select('*')
+      .eq('language', 'latin')
+      .ilike('expansion', `%${searchTerm}%`)
+      .order('created_at', { ascending: false });
+  
+    return { data, error };
+  }

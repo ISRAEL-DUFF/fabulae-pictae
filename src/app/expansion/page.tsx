@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useTransition, useEffect } from 'react';
+import { useState, useTransition, useEffect, useCallback } from 'react';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -10,18 +10,96 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { expandWordDetails, type ExpandWordDetailsInput } from '@/ai/flows/expand-word-details';
-import { saveWordExpansion, getSavedWordExpansions, updateWordExpansion, type SavedExpansion } from '@/services/wordService';
+import { saveWordExpansion, getSavedWordExpansions, updateWordExpansion, searchWordExpansions, type SavedExpansion } from '@/services/wordService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Wand2, FileText, History, Edit, Save, X } from 'lucide-react';
+import { Loader2, Wand2, FileText, History, Edit, Save, X, Search } from 'lucide-react';
 
 const expansionFormSchema = z.object({
   word: z.string().min(1, { message: 'Please enter a word.' }),
 });
+
+function SearchExpansionsModal({ onSelect }: { onSelect: (expansion: SavedExpansion) => void }) {
+    const [searchTerm, setSearchTerm] = useState('');
+    const [results, setResults] = useState<SavedExpansion[]>([]);
+    const [isSearching, startSearchTransition] = useTransition();
+    const { toast } = useToast();
+  
+    const handleSearch = useCallback(() => {
+        startSearchTransition(async () => {
+            const { data, error } = await searchWordExpansions(searchTerm);
+            if (error) {
+            toast({
+                variant: 'destructive',
+                title: 'Search Error',
+                description: 'Could not perform search.',
+            });
+            } else {
+            setResults(data || []);
+            }
+        });
+    }, [searchTerm, toast]);
+  
+    useEffect(() => {
+      const delayDebounceFn = setTimeout(() => {
+        if (searchTerm) {
+            handleSearch();
+        } else {
+            setResults([]);
+        }
+      }, 300);
+  
+      return () => clearTimeout(delayDebounceFn);
+    }, [searchTerm, handleSearch]);
+  
+    return (
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Search Expansions</DialogTitle>
+          <DialogDescription>
+            Search for words within your saved expansions.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+            <Input
+                placeholder="Type to search..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            {isSearching && (
+                 <div className="flex items-center justify-center p-4">
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <span>Searching...</span>
+                 </div>
+            )}
+            {!isSearching && results.length > 0 && (
+                <ScrollArea className="h-60">
+                    <div className="space-y-2">
+                    {results.map((item) => (
+                        <Button
+                        key={item.id}
+                        variant="ghost"
+                        className="w-full justify-start font-normal"
+                        onClick={() => onSelect(item)}
+                        >
+                        {item.word}
+                        </Button>
+                    ))}
+                    </div>
+                </ScrollArea>
+            )}
+            {!isSearching && results.length === 0 && searchTerm && (
+                <p className="text-sm text-center text-muted-foreground p-4">No results found.</p>
+            )}
+        </div>
+      </DialogContent>
+    );
+  }
 
 export default function ExpansionPage() {
   const [activeExpansion, setActiveExpansion] = useState<SavedExpansion | null>(null);
@@ -30,6 +108,7 @@ export default function ExpansionPage() {
   const [isPending, startTransition] = useTransition();
   const [isUpdating, startUpdateTransition] = useTransition();
   const [savedExpansions, setSavedExpansions] = useState<SavedExpansion[]>([]);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof expansionFormSchema>>({
@@ -98,6 +177,11 @@ export default function ExpansionPage() {
     form.setValue('word', savedExpansion.word);
     setActiveExpansion(savedExpansion);
     setIsEditing(false);
+  }
+
+  const handleSearchSelect = (savedExpansion: SavedExpansion) => {
+    handleHistoryClick(savedExpansion);
+    setIsSearchOpen(false);
   }
 
   const handleEditClick = () => {
@@ -171,16 +255,27 @@ export default function ExpansionPage() {
                     </FormItem>
                   )}
                 />
-                <Button type="submit" disabled={isPending} className="w-full">
-                  {isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Analyzing...
-                    </>
-                  ) : (
-                    'Analyze Word'
-                  )}
-                </Button>
+                 <div className="flex flex-col sm:flex-row gap-2">
+                    <Button type="submit" disabled={isPending} className="w-full">
+                    {isPending ? (
+                        <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Analyzing...
+                        </>
+                    ) : (
+                        'Analyze Word'
+                    )}
+                    </Button>
+                    <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline" className="w-full">
+                                <Search className="mr-2 h-4 w-4" />
+                                Search
+                            </Button>
+                        </DialogTrigger>
+                        <SearchExpansionsModal onSelect={handleSearchSelect} />
+                    </Dialog>
+                </div>
               </form>
             </Form>
           </CardContent>
